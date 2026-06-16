@@ -1,0 +1,37 @@
+@import "../styles/globals.css";
+
+@layer base {
+  :root {
+    @apply font-sans;
+  }
+
+  html,
+  body {
+    @apply m-0 min-h-screen min-w-[320px] bg-background text-foreground antialiased;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+/* Soft ambient background glow for the dark theme */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 20% 0%, oklch(0.488 0.243 264.376 / 0.18), transparent 70%),
+    radial-gradient(50% 50% at 90% 10%, oklch(0.696 0.17 162.48 / 0.12), transparent 70%),
+    radial-gradient(60% 60% at 50% 100%, oklch(0.627 0.265 303.9 / 0.1), transparent 70%);
+}
+
+@media (prefers-reduced-motion) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+  }
+}
