@@ -61,6 +61,24 @@ export function Interview() {
     const [aiLevel, setAiLevel] = useState(0);
     const [userLevel, setUserLevel] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [timeLeft, setTimeLeft] = useState(1200); // 20 minutes in seconds
+
+    useEffect(() => {
+        if (status !== "live") return;
+
+        const timer = setInterval(() => {
+            setTimeLeft((prev) => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    endInterview();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [status]);
 
 
     // Resources we need to tear down on exit.
@@ -354,7 +372,11 @@ export function Interview() {
                         </span>
                         {status === "connecting" ? "Connecting…" : status === "ending" ? "Wrapping up…" : "Interview live"}
                     </div>
-
+                    {status === "live" && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary font-mono animate-pulse">
+                            Time remaining: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                        </span>
+                    )}
                 </div>
                 <span className="text-sm text-muted-foreground">SignalForge</span>
             </header>
