@@ -80,7 +80,6 @@ export function Interview() {
         return () => clearInterval(timer);
     }, [status]);
 
-
     // Resources we need to tear down on exit.
     const pcRef = useRef<RTCPeerConnection | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
@@ -219,7 +218,8 @@ export function Interview() {
                             };
 
                             await audioCtx.resume();
-
+                            aiAudioEl!.defaultPlaybackRate = 0.92;
+                            aiAudioEl!.playbackRate = 0.92;
                             await aiAudioEl!.play();
                         } catch (err: any) {
                             console.error("Local speech turn error:", err);

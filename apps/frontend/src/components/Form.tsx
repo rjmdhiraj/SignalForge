@@ -7,6 +7,40 @@ import { BACKEND_URL } from "@/lib/config";
 import { useNavigate } from "react-router";
 import { ArrowRight, Github, Loader2, Mic, FileText } from "lucide-react";
 
+function loadScript(src: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+            resolve();
+            return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => resolve();
+        script.onerror = (e) => reject(e);
+        document.head.appendChild(script);
+    });
+}
+
+async function extractTextFromPdf(file: File): Promise<string> {
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfjsLib = (window as any).pdfjsLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = "";
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(" ");
+        fullText += pageText + "\n";
+    }
+    
+    return fullText;
+}
+
 export function Form() {
     const [candidateName, setCandidateName] = useState("");
     const [targetRole, setTargetRole] = useState("");
@@ -14,6 +48,10 @@ export function Form() {
     const [github, setGithub] = useState("");
     const [resumeText, setResumeText] = useState("");
     const [loading, setLoading] = useState(false);
+    
+    const [dragging, setDragging] = useState(false);
+    const [parsingPdf, setParsingPdf] = useState(false);
+    const [pdfName, setPdfName] = useState("");
     
     const navigate = useNavigate();
 
@@ -31,7 +69,7 @@ export function Form() {
             return;
         }
         if (type === "resume" && !resumeText.trim()) {
-            toast("Please paste your resume details");
+            toast("Please paste your resume details or upload a resume PDF");
             return;
         }
 
@@ -50,6 +88,25 @@ export function Form() {
             setLoading(false);
         }
     }
+
+    const handleFile = async (file: File) => {
+        if (file.type !== "application/pdf") {
+            toast("Please upload a PDF file.");
+            return;
+        }
+        setParsingPdf(true);
+        setPdfName(file.name);
+        try {
+            const text = await extractTextFromPdf(file);
+            setResumeText(text);
+            toast(`Successfully extracted resume text!`);
+        } catch (err) {
+            console.error("PDF Parsing error:", err);
+            toast("Failed to parse PDF. Please copy and paste text instead.");
+        } finally {
+            setParsingPdf(false);
+        }
+    };
 
     return (
         <main className="flex min-h-screen w-screen items-center justify-center overflow-y-auto py-12 px-6">
@@ -119,7 +176,7 @@ export function Form() {
                                 }`}
                             >
                                 <FileText className="size-4" />
-                                Resume Text
+                                Resume PDF
                             </button>
                         </div>
                     </div>
@@ -143,13 +200,58 @@ export function Form() {
                         </div>
                     ) : (
                         <div className="space-y-4 animate-fadeIn">
-                            {/* Resume Text Area */}
+                            {/* Drag and Drop Zone */}
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-foreground">Resume Content</label>
+                                <label className="text-sm font-semibold text-foreground">Upload Resume (PDF)</label>
+                                <div
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        setDragging(true);
+                                    }}
+                                    onDragLeave={() => setDragging(false)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setDragging(false);
+                                        const file = e.dataTransfer.files[0];
+                                        if (file) handleFile(file);
+                                    }}
+                                    className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer ${
+                                        dragging
+                                            ? "border-primary bg-primary/5"
+                                            : "border-border bg-background/30 hover:bg-background/50"
+                                    }`}
+                                    onClick={() => {
+                                        const input = document.createElement("input");
+                                        input.type = "file";
+                                        input.accept = ".pdf,application/pdf";
+                                        input.onchange = (e: any) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleFile(file);
+                                        };
+                                        input.click();
+                                    }}
+                                >
+                                    <FileText className={`size-8 mb-2 ${parsingPdf ? "animate-bounce text-primary" : "text-muted-foreground"}`} />
+                                    {parsingPdf ? (
+                                        <p className="text-sm font-medium text-foreground">Extracting resume info...</p>
+                                    ) : pdfName ? (
+                                        <p className="text-sm font-medium text-primary">Uploaded: {pdfName}</p>
+                                    ) : (
+                                        <p className="text-sm font-medium text-muted-foreground text-center">
+                                            Drag & drop your resume PDF here, or <span className="text-primary hover:underline">browse</span>
+                                        </p>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground mt-1">PDF format supported</p>
+                                </div>
+                            </div>
+
+                            {/* Extracted Text Area */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-foreground">Extracted Resume Content (Editable)</label>
                                 <textarea
                                     value={resumeText}
-                                    rows={10}
-                                    placeholder="Paste your resume details here..."
+                                    rows={6}
+                                    placeholder="Extracted details will appear here, or you can paste directly..."
                                     onChange={(e) => setResumeText(e.target.value)}
                                     disabled={loading}
                                     className="flex w-full rounded-xl border border-border bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -161,7 +263,7 @@ export function Form() {
                     {/* Action Button */}
                     <div className="pt-2">
                         <Button
-                            disabled={loading}
+                            disabled={loading || parsingPdf}
                             onClick={onSubmit}
                             size="lg"
                             className="w-full gap-2 rounded-xl py-6 text-base font-semibold transition-all hover:scale-[1.01]"
