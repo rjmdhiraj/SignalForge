@@ -17,7 +17,7 @@ export async function initSideband(callId: string, interviewId: string) {
 
     ws.on("open", function open() {
         console.log("Connected to server.");
-    
+
         // Send client events over the WebSocket once connected
         ws.send(
             JSON.stringify({
@@ -38,10 +38,10 @@ export async function initSideband(callId: string, interviewId: string) {
     ws.on("message", async function incoming(message) {
         const parsedMessage = JSON.parse(message.toString());
         if (parsedMessage.type == "response.done") {
-            let contents: {type: string, transcript: string}[] = [];
+            let contents: { type: string, transcript: string }[] = [];
 
-            parsedMessage.response.output.map(x => contents = [...contents, ...x.content]);
-            const assistantMessage = contents.filter(x => x.type === "output_audio").map(x => x.transcript).join(" ");
+            parsedMessage.response.output.map((x: any) => contents = [...contents, ...x.content]);
+            const assistantMessage = contents.filter((x: any) => x.type === "output_audio").map((x: any) => x.transcript).join(" ");
             await prisma.message.create({
                 data: {
                     interviewId,

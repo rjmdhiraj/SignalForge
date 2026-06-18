@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
 import axios from "axios";
 import { BACKEND_URL } from "@/lib/config";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { ArrowRight, Github, Loader2, Mic, FileText } from "lucide-react";
+import { useAuth, SignIn } from "@clerk/clerk-react";
 
 function loadScript(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -23,39 +24,69 @@ function loadScript(src: string): Promise<void> {
 
 async function extractTextFromPdf(file: File): Promise<string> {
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
-    
+
     const arrayBuffer = await file.arrayBuffer();
     const pdfjsLib = (window as any).pdfjsLib;
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    
+
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = "";
-    
+
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const pageText = textContent.items.map((item: any) => item.str).join(" ");
         fullText += pageText + "\n";
     }
-    
+
     return fullText;
 }
 
 export function Form() {
+    const { jobId } = useParams();
+    const { isSignedIn } = useAuth();
+    const hasMock = !!localStorage.getItem("sf_mock_user");
+
     const [candidateName, setCandidateName] = useState("");
     const [targetRole, setTargetRole] = useState("");
     const [type, setType] = useState<"github" | "resume">("github");
     const [github, setGithub] = useState("");
     const [resumeText, setResumeText] = useState("");
     const [loading, setLoading] = useState(false);
-    
+    const [loadingJob, setLoadingJob] = useState(false);
+
     const [dragging, setDragging] = useState(false);
     const [parsingPdf, setParsingPdf] = useState(false);
     const [pdfName, setPdfName] = useState("");
-    
+    const [showSignInModal, setShowSignInModal] = useState(false);
+
     const navigate = useNavigate();
 
+    // Fetch Job Template if jobId exists
+    useEffect(() => {
+        if (jobId) {
+            fetchJobTemplate();
+        }
+    }, [jobId]);
+
+    async function fetchJobTemplate() {
+        setLoadingJob(true);
+        try {
+            const res = await axios.get(`${BACKEND_URL}/api/v1/organization/job/${jobId}`);
+            setTargetRole(res.data.title);
+        } catch (err) {
+            console.error("Failed to load job invite:", err);
+            toast("Failed to load job template details. Ad-hoc details will be used.");
+        } finally {
+            setLoadingJob(false);
+        }
+    }
+
     async function onSubmit() {
+        if (!isSignedIn && !hasMock) {
+            setShowSignInModal(true);
+            return;
+        }
         if (!candidateName.trim()) {
             toast("Please provide your full name");
             return;
@@ -81,6 +112,7 @@ export function Form() {
                 type,
                 github: type === "github" ? github.trim() : null,
                 resumeText: type === "resume" ? resumeText.trim() : null,
+                jobId: jobId || null
             });
             navigate(`/interview/${response.data.id}`);
         } catch (e) {
@@ -109,7 +141,25 @@ export function Form() {
     };
 
     return (
-        <main className="flex min-h-screen w-screen items-center justify-center overflow-y-auto py-12 px-6">
+        <main className="flex min-h-screen w-screen items-center justify-center overflow-y-auto py-12 px-6 relative">
+            {/* Top Auth Bar */}
+            <div className="absolute top-4 right-4 flex items-center gap-4">
+                {(isSignedIn || hasMock) ? (
+                    <button
+                        onClick={() => navigate("/dashboard")}
+                        className="text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 px-3 py-1.5 rounded-xl transition-all"
+                    >
+                        Go to Dashboard
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => setShowSignInModal(true)}
+                        className="text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 px-3 py-1.5 rounded-xl transition-all"
+                    >
+                        Sign In
+                    </button>
+                )}
+            </div>
             <div className="flex w-full max-w-2xl flex-col items-center">
                 <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/50 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
                     <Mic className="size-3.5 text-primary animate-pulse" />
@@ -143,7 +193,7 @@ export function Form() {
                             value={targetRole}
                             placeholder="e.g. Senior React Developer or Paste full Job Description"
                             onChange={(e) => setTargetRole(e.target.value)}
-                            disabled={loading}
+                            disabled={loading || !!jobId}
                             className="bg-background/50 border-border focus-visible:ring-ring"
                         />
                     </div>
@@ -156,11 +206,10 @@ export function Form() {
                                 type="button"
                                 onClick={() => setType("github")}
                                 disabled={loading}
-                                className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${
-                                    type === "github"
+                                className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${type === "github"
                                         ? "bg-primary text-primary-foreground shadow-sm"
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                                }`}
+                                    }`}
                             >
                                 <Github className="size-4" />
                                 GitHub Profile
@@ -169,11 +218,10 @@ export function Form() {
                                 type="button"
                                 onClick={() => setType("resume")}
                                 disabled={loading}
-                                className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${
-                                    type === "resume"
+                                className={`flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${type === "resume"
                                         ? "bg-primary text-primary-foreground shadow-sm"
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                                }`}
+                                    }`}
                             >
                                 <FileText className="size-4" />
                                 Resume PDF
@@ -215,11 +263,10 @@ export function Form() {
                                         const file = e.dataTransfer.files[0];
                                         if (file) handleFile(file);
                                     }}
-                                    className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer ${
-                                        dragging
+                                    className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer ${dragging
                                             ? "border-primary bg-primary/5"
                                             : "border-border bg-background/30 hover:bg-background/50"
-                                    }`}
+                                        }`}
                                     onClick={() => {
                                         const input = document.createElement("input");
                                         input.type = "file";
@@ -286,6 +333,19 @@ export function Form() {
                     We will analyze your background and request microphone access to start the voice stream.
                 </p>
             </div>
+            {showSignInModal && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+                    <div className="relative w-full max-w-md flex flex-col items-center">
+                        <button
+                            onClick={() => setShowSignInModal(false)}
+                            className="absolute -top-8 right-4 text-zinc-400 hover:text-white text-xs font-mono bg-zinc-900 border border-zinc-800 px-3 py-1 rounded-lg"
+                        >
+                            Cancel
+                        </button>
+                        <SignIn fallbackRedirectUrl={window.location.pathname} />
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

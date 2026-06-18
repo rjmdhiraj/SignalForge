@@ -96,6 +96,26 @@ export function Interview() {
 
         (async () => {
             try {
+                // Fetch interview info
+                const interviewRes = await axios.get(`${BACKEND_URL}/api/v1/interview/${interviewId}`);
+                const interview = interviewRes.data;
+
+                if (interview.isExpired) {
+                    setError(`This interview invitation has expired. Expiration Date: ${new Date(interview.expiresAt).toLocaleString()}`);
+                    setStatus("ending");
+                    return;
+                }
+                if (interview.isNotStartedYet) {
+                    setError(`This interview is scheduled in the future and is not active yet. Scheduled Date: ${new Date(interview.scheduledAt).toLocaleString()}`);
+                    setStatus("ending");
+                    return;
+                }
+                if (interview.status === "Done") {
+                    setError("This interview session has already been completed.");
+                    setStatus("ending");
+                    return;
+                }
+
                 // Check if backend config has OpenAI key
                 const statusRes = await axios.get(`${BACKEND_URL}/api/v1/config/status`);
                 const { hasOpenAI } = statusRes.data;
@@ -231,10 +251,10 @@ export function Interview() {
 
                         // Ensure we cleanup any previous sockets/recorders
                         if (recorderRef.current && recorderRef.current.state !== "inactive") {
-                            try { recorderRef.current.stop(); } catch {}
+                            try { recorderRef.current.stop(); } catch { }
                         }
                         if (socketRef.current) {
-                            try { socketRef.current.close(); } catch {}
+                            try { socketRef.current.close(); } catch { }
                         }
 
                         let accumulatedTranscript = "";
@@ -244,10 +264,10 @@ export function Interview() {
                             if (silenceTimer) clearTimeout(silenceTimer);
 
                             if (recorderRef.current && recorderRef.current.state !== "inactive") {
-                                try { recorderRef.current.stop(); } catch {}
+                                try { recorderRef.current.stop(); } catch { }
                             }
                             if (socketRef.current) {
-                                try { socketRef.current.close(); } catch {}
+                                try { socketRef.current.close(); } catch { }
                             }
 
                             const trimmed = accumulatedTranscript.trim();
@@ -320,11 +340,11 @@ export function Interview() {
         return () => {
             cancelled = true;
             if (recognition) {
-                try { recognition.abort(); } catch {}
+                try { recognition.abort(); } catch { }
             }
             localSpeechSynthesis.cancel();
             if (aiAudioEl) {
-                try { aiAudioEl.pause(); } catch {}
+                try { aiAudioEl.pause(); } catch { }
             }
             cleanup();
         };
@@ -338,7 +358,7 @@ export function Interview() {
         userStreamRef.current?.getTracks().forEach((t) => t.stop());
         pcRef.current?.getSenders().forEach((s) => s.track?.stop());
         pcRef.current?.close();
-        audioCtxRef.current?.close().catch(() => {});
+        audioCtxRef.current?.close().catch(() => { });
     }
 
     function endInterview() {
