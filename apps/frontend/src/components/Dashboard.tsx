@@ -411,10 +411,17 @@ export function Dashboard() {
                     },
                     headers
                 );
-                navigator.clipboard.writeText(res.data.link);
-                toast.success(`Interview scheduled! Link copied to clipboard: ${res.data.link}`, {
-                    duration: 6000
-                });
+                try {
+                    await navigator.clipboard.writeText(res.data.link);
+                    toast.success(`Interview scheduled! Link copied to clipboard: ${res.data.link}`, {
+                        duration: 6000
+                    });
+                } catch (clipErr) {
+                    console.warn("Clipboard write blocked:", clipErr);
+                    toast.success(`Interview scheduled! Link: ${res.data.link}`, {
+                        duration: 8000
+                    });
+                }
             }
             setIsScheduleModalOpen(false);
             if (selectedTeam) {
@@ -634,9 +641,16 @@ export function Dashboard() {
         }
     }
 
-    function copyToClipboard(text: string) {
-        navigator.clipboard.writeText(text);
-        toast.success("Invite link copied to clipboard!");
+    async function copyToClipboard(text: string) {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success("Invite link copied to clipboard!");
+        } catch (clipErr) {
+            console.warn("Clipboard write blocked:", clipErr);
+            toast.success(`Invite link: ${text}`, {
+                duration: 8000
+            });
+        }
     }
 
     if (!isLoaded && !localStorage.getItem("sf_mock_user")) {
